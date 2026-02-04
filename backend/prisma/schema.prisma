@@ -1,0 +1,453 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== ENTREPRISE ====================
+
+model Company {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  phone     String?
+  address   String?
+  email     String?
+  nif       String?
+  rccm      String?
+  agrementNumber String?
+  bankName  String?
+  bankAccount String?
+  logo      String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users     User[]
+  shipments Shipment[]
+  clients   Client[]
+
+  @@index([slug])
+  @@map("companies")
+}
+
+// ==================== UTILISATEURS ====================
+
+model User {
+  id               String    @id @default(cuid())
+  email            String    @unique
+  password         String
+  name             String
+  phone            String?
+  role             Role      @default(AGENT)
+  isActive         Boolean   @default(true)
+  
+  emailVerified    Boolean   @default(false)
+  verificationCode String?
+  codeExpiresAt    DateTime?
+  
+  failedAttempts   Int       @default(0)
+  lockedUntil      DateTime?
+  lastLogin        DateTime?
+  
+  companyId        String
+  company          Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  refreshTokens    RefreshToken[]
+  shipments        Shipment[]
+  auditLogs        AuditLog[]
+
+  @@index([email])
+  @@index([companyId])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([token])
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// ==================== CLIENTS ====================
+
+model Client {
+  id        String   @id @default(cuid())
+  name      String
+  nif       String?
+  phone     String?
+  email     String?
+  address   String?
+  city      String?
+  contactPerson String?
+  
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  shipments Shipment[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId])
+  @@index([nif])
+  @@map("clients")
+}
+
+// ==================== DOSSIERS DE TRANSIT ====================
+
+model Shipment {
+  id              String         @id @default(cuid())
+  trackingNumber  String         @unique
+  internalRef     String?
+  
+  // Références documentaires
+  blNumber        String?
+  doNumber        String?
+  declarationRef  String?
+  declarationNumber String?
+  liquidationNumber String?
+  quittanceNumber String?
+  ddiNumber       String?
+  baeNumber       String?
+  bsNumber        String?
+  
+  // Client
+  clientId        String?
+  client          Client?        @relation(fields: [clientId], references: [id])
+  clientName      String
+  clientNif       String?
+  clientPhone     String?
+  clientAddress   String?
+  
+  // Marchandise
+  description     String
+  hsCode          String?
+  packaging       String?
+  packageCount    Int?
+  grossWeight     Float?
+  netWeight       Float?
+  
+  // Valeur
+  cifValue        Float?
+  cifCurrency     String?        @default("USD")
+  exchangeRate    Float?
+  cifValueGnf     Float?
+  fobValue        Float?
+  freightValue    Float?
+  insuranceValue  Float?
+  
+  // Transport maritime
+  vesselName      String?
+  voyageNumber    String?
+  portOfLoading   String?
+  portOfDischarge String?        @default("CONAKRY")
+  eta             DateTime?
+  ata             DateTime?
+  manifestNumber  String?
+  manifestYear    Int?
+  
+  // Fournisseur
+  supplierName    String?
+  supplierAddress String?
+  supplierCountry String?
+  
+  // Douane
+  customsRegime   CustomsRegime  @default(IM4)
+  customsOffice   String?        @default("GNB02")
+  customsOfficeName String?      @default("BUREAU CONAKRY PORT")
+  declarantCode   String?
+  declarantName   String?
+  circuit         Circuit?
+  
+  // Taxes calculées
+  dutyDD          Float?
+  dutyRTL         Float?
+  dutyTVA         Float?
+  dutyPC          Float?
+  dutyCA          Float?
+  dutyBFU         Float?
+  totalDuties     Float?
+  
+  // Livraison
+  deliveryPlace   String?
+  deliveryDate    DateTime?
+  deliveryDriver  String?
+  deliveryPhone   String?
+  deliveryTruck   String?
+  
+  // Statut
+  status          ShipmentStatus @default(PENDING)
+  
+  // Relations
+  companyId       String
+  company         Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdById     String
+  createdBy       User           @relation(fields: [createdById], references: [id])
+  
+  containers      Container[]
+  documents       Document[]
+  expenses        Expense[]
+  timeline        TimelineEvent[]
+  
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([trackingNumber])
+  @@index([blNumber])
+  @@index([companyId])
+  @@index([clientId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("shipments")
+}
+
+// ==================== CONTENEURS ====================
+
+model Container {
+  id           String        @id @default(cuid())
+  number       String
+  type         ContainerType @default(DRY_40HC)
+  sealNumber   String?
+  grossWeight  Float?
+  tareWeight   Float?
+  packageCount Int?
+  description  String?
+  temperature  Float?
+  condition    String?
+  damages      String?
+  
+  shipmentId   String
+  shipment     Shipment      @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  
+  createdAt    DateTime      @default(now())
+
+  @@index([shipmentId])
+  @@index([number])
+  @@map("containers")
+}
+
+// ==================== DOCUMENTS ====================
+
+model Document {
+  id          String       @id @default(cuid())
+  type        DocumentType
+  name        String
+  url         String
+  reference   String?
+  issueDate   DateTime?
+  expiryDate  DateTime?
+  notes       String?
+  
+  shipmentId  String
+  shipment    Shipment     @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime     @default(now())
+
+  @@index([shipmentId])
+  @@index([type])
+  @@map("documents")
+}
+
+// ==================== DÉPENSES ====================
+
+model Expense {
+  id          String          @id @default(cuid())
+  type        ExpenseType
+  category    ExpenseCategory
+  description String
+  amount      Float
+  quantity    Int?            @default(1)
+  unitPrice   Float?
+  reference   String?
+  supplier    String?
+  paid        Boolean         @default(false)
+  paidAt      DateTime?
+  paidBy      String?
+  receiptUrl  String?
+  notes       String?
+  
+  shipmentId  String
+  shipment    Shipment        @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([shipmentId])
+  @@index([category])
+  @@index([paid])
+  @@map("expenses")
+}
+
+// ==================== TIMELINE ====================
+
+model TimelineEvent {
+  id          String   @id @default(cuid())
+  action      String
+  description String?
+  date        DateTime @default(now())
+  userId      String?
+  userName    String?
+  
+  shipmentId  String
+  shipment    Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  @@index([shipmentId])
+  @@index([date])
+  @@map("timeline_events")
+}
+
+// ==================== AUDIT ====================
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  action    String
+  entity    String?
+  entityId  String?
+  details   Json?
+  ipAddress String?
+  userAgent String?
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ==================== ENUMS ====================
+
+enum Role {
+  DIRECTOR
+  ACCOUNTANT
+  AGENT
+  CLIENT
+}
+
+enum ShipmentStatus {
+  DRAFT
+  PENDING
+  ARRIVED
+  DDI_OBTAINED
+  DECLARATION_FILED
+  LIQUIDATION_ISSUED
+  CUSTOMS_PAID
+  BAE_ISSUED
+  TERMINAL_PAID
+  DO_RELEASED
+  EXIT_NOTE_ISSUED
+  IN_DELIVERY
+  DELIVERED
+  INVOICED
+  CLOSED
+  ARCHIVED
+}
+
+enum CustomsRegime {
+  IM4
+  IM5
+  IM6
+  IM7
+  EX1
+  EX2
+  TR
+}
+
+enum Circuit {
+  GREEN
+  YELLOW
+  RED
+}
+
+enum ContainerType {
+  DRY_20
+  DRY_40
+  DRY_40HC
+  REEFER_20
+  REEFER_40
+  REEFER_40HR
+  OPEN_TOP_20
+  OPEN_TOP_40
+  FLAT_RACK_20
+  FLAT_RACK_40
+}
+
+enum DocumentType {
+  BL
+  INVOICE
+  PACKING_LIST
+  DDI
+  PHYTO_CERT
+  ORIGIN_CERT
+  EUR1
+  TRANSIT_ORDER
+  DECLARATION
+  LIQUIDATION
+  QUITTANCE
+  BAE
+  DO
+  EXIT_NOTE
+  EIR
+  TERMINAL_INVOICE
+  TERMINAL_RECEIPT
+  MSC_INVOICE
+  DELIVERY_NOTE
+  CUSTOMS_INVOICE
+  OTHER
+}
+
+enum ExpenseType {
+  PROVISION
+  DISBURSEMENT
+}
+
+enum ExpenseCategory {
+  DD
+  TVA
+  RTL
+  PC
+  CA
+  BFU
+  DDI_FEE
+  ACCONAGE
+  BRANCHEMENT
+  SURESTARIES
+  MANUTENTION
+  PASSAGE_TERRE
+  RELEVAGE
+  SECURITE_TERMINAL
+  DO_FEE
+  SEAWAY_BILL
+  MANIFEST_FEE
+  CONTAINER_DAMAGE
+  SECURITE_MSC
+  SURCHARGE
+  PAC
+  ADP_FEE
+  TRANSPORT
+  TRANSPORT_ADD
+  HONORAIRES
+  COMMISSION
+  ASSURANCE
+  MAGASINAGE
+  SCANNER
+  ESCORTE
+  AUTRE
+}
